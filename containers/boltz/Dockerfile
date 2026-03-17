@@ -4,20 +4,6 @@ FROM nvcr.io/nvidia/ai-workbench/python-cuda122:1.0.3
 ARG CERT_URL=""
 RUN if [ ! -z "$CERT_URL" ]; then curl "$CERT_URL" >> /etc/ssl/certs/ca-certificates.crt; fi
 
-# Dependencies
-RUN apt-get update \
-    && apt-get install -y build-essential bison flex \
-    && apt-get clean && rm -rf /var/cache/apt/lists /var/lib/apt/lists
-
-# Install Maxit for pdb-cif conversion
-RUN curl -OL https://sw-tools.rcsb.org/apps/MAXIT/maxit-v11.400-prod-src.tar.gz && \
-  tar -xvzf maxit-v11.400-prod-src.tar.gz && \
-  cd maxit-v11.400-prod-src && \
-  make binary
-
-ENV RCSBROOT=/maxit-v11.400-prod-src
-ENV PATH=${RCSBROOT}/bin:${PATH}
-
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 RUN git clone https://github.com/jwohlwend/boltz.git \
