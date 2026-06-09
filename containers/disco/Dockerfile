@@ -1,0 +1,73 @@
+FROM nvidia/cuda:12.2.2-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# COPYed from the build context so we don't need curl to fetch it.
+COPY local-certs.pem /usr/local/share/ca-certificates/local-certs.crt
+RUN cat /usr/local/share/ca-certificates/local-certs.crt >> /etc/ssl/certs/ca-certificates.crt
+
+# Install Python 3.12 and runtime deps. Note: python3-pip from Ubuntu 22.04
+# is bound to the system Python 3.10 and can't run under 3.12 (no distutils);
+# we bootstrap pip for 3.12 with ensurepip below instead.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+       software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       python3.12 python3.12-venv python3.12-dev \
+       git build-essential \
+       libxrender1 libxext6 libexpat1 \
+       libx11-6 libxcb1 libxau6 libxdmcp6 libfontconfig1 libfreetype6 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3.12 -m ensurepip --upgrade \
+    && python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel uv
+
+# CUTLASS — required by DeepSpeed4Science EvoformerAttention JIT compile
+RUN git clone --depth 1 https://github.com/NVIDIA/cutlass.git /opt/cutlass
+ENV CUTLASS_PATH=/opt/cutlass
+
+# DISCO source
+RUN git clone --depth 1 https://github.com/hugohrban/DISCO.git /opt/DISCO
+WORKDIR /opt/DISCO
+
+# Make uv trust the corporate CA bundle that we appended above
+ENV UV_PYTHON_PREFERENCE=only-system
+ENV UV_NATIVE_TLS=1
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+RUN uv sync
+
+# Pin torch to a cu121 build so the image works on hosts with drivers that
+# only support up to CUDA 12.2 (default wheels target cu126/cu128). Follows
+# the documented procedure in DISCO's README.
+RUN uv pip uninstall torch torchvision torchaudio || true
+RUN uv pip install torch torchvision torchaudio --torch-backend=cu121
+
+# CUDA toolkit from the base image — make sure CUDA_HOME is set so DeepSpeed
+# can JIT-compile EvoformerAttention on first inference call.
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+
+# Activate the venv by default
+ENV PATH=/opt/DISCO/.venv/bin:${PATH}
+ENV VIRTUAL_ENV=/opt/DISCO/.venv
+
+RUN apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 update \
+    && apt-get install -y --no-install-recommends wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# LigandMPNN install
+ARG MODEL_PARAMS_VAR=/opt/LigandMPNN/model_params
+RUN git clone --depth 1 https://github.com/dauparas/LigandMPNN.git /opt/LigandMPNN \
+    && cp /opt/DISCO/packages/openfold/np/residue_constants.py /opt/LigandMPNN/openfold/np/residue_constants.py \
+    && mkdir -p $MODEL_PARAMS_VAR
+
+# LigandMPNN weights
+RUN wget -q https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_005_25.pt -O $MODEL_PARAMS_VAR/ligandmpnn_v_32_005_25.pt
+RUN wget -q https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_010_25.pt -O $MODEL_PARAMS_VAR/ligandmpnn_v_32_010_25.pt
+RUN wget -q https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_020_25.pt -O $MODEL_PARAMS_VAR/ligandmpnn_v_32_020_25.pt
+RUN wget -q https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_030_25.pt -O $MODEL_PARAMS_VAR/ligandmpnn_v_32_030_25.pt
+RUN wget -q https://files.ipd.uw.edu/pub/ligandmpnn/global_label_membrane_mpnn_v_48_020.pt -O $MODEL_PARAMS_VAR/global_label_membrane_mpnn_v_48_020.pt
+
+ENTRYPOINT []
