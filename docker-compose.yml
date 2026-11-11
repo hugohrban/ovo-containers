@@ -101,3 +101,8 @@ services:
           context: ./containers/disco
           dockerfile: Dockerfile
           platforms: ['linux/x86_64']
+    esmfold2:
+        build:
+          context: ./containers/esmfold2
+          dockerfile: Dockerfile
+          platforms: ['linux/x86_64']
