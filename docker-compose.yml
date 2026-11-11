@@ -101,3 +101,8 @@ services:
           context: ./containers/disco
           dockerfile: Dockerfile
           platforms: ['linux/x86_64']
+    bindcraft2:
+        build:
+          context: ./containers/bindcraft2
+          dockerfile: Dockerfile
+          platforms: ['linux/x86_64']
