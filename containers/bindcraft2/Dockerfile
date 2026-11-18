@@ -13,7 +13,7 @@ RUN if [ ! -z "$CERT_URL" ]; then curl "$CERT_URL" >> /etc/ssl/certs/ca-certific
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
 # Editable install: the runtime finds settings/ and scaffolds/ relative to the source tree
-ARG BINDCRAFT2_REVISION=7a2dfdb
+ARG BINDCRAFT2_REVISION=8c1a858
 RUN git clone https://github.com/PacesaLab/BindCraft2.git /opt/bindcraft \
     && git -C /opt/bindcraft checkout "$BINDCRAFT2_REVISION" \
     && python3 -m pip install -e "/opt/bindcraft[cuda12]"
